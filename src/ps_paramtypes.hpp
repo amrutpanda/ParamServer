@@ -1,0 +1,14 @@
+#ifndef _PS_PARAMTYPES_HPP
+#define _PS_PARAMTYPES_HPP
+
+
+enum PARAM
+{
+    READ_ONCE = 0,
+    READ_ONLY,
+    READ_WRITE,
+    CONSTANT,
+    WRITE_ONCE
+};
+
+#endif // _PS_PARAMTYPES_HPP
