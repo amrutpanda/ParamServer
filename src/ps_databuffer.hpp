@@ -7,8 +7,9 @@
 #include <type_traits>
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
-namespace paramserver
+namespace ps
 {   
     template <typename T>
     struct Slot
@@ -51,18 +52,27 @@ namespace paramserver
             if (offset >= s) return;
             memcpy(data+offset, &in, sizeof(U));
         }
+
+        template<typename U>
+        void write(const U& in, int offset, int size)
+        {
+            if (offset >= s) return;
+            if (size > N - offset) return;
+            memcpy(data+offset, U& in , size * sizeof(U));
+        }
+
     };
 
 
-    template <typename T, unsigned int ElementSize = 1 ,unsigned int BUFFER_SIZE = 16>
+    template <typename T, unsigned int NUM_ELEMENTS = 1 ,unsigned int BUFFER_SIZE = 16>
     class SpmcBuffer
     {
     private:
         constexpr static unsigned int BUFFER_MASK = BUFFER_SIZE - 1;
-        constexpr static unsigned int N = ElementSize;
+        constexpr static unsigned int N = NUM_ELEMENTS;
         unsigned int MAX_RETRIES = 1024;
-        std::atomic<unsigned int> latest_pos;
-        std::atomic<unsigned int> pos;
+        std::atomic<unsigned int> latest_pos{};
+        std::atomic<unsigned int> pos{};
         Slot<T> data_[BUFFER_SIZE];
     protected:
         
@@ -72,8 +82,7 @@ namespace paramserver
 
         constexpr unsigned int size() const {return BUFFER_SIZE;};
 
-        template<typename U>
-        void write(const U& data)
+        void write(const T& data)
         {
             ++pos;
             Slot<T> buf = data_[pos & BUFFER_MASK];
@@ -84,25 +93,26 @@ namespace paramserver
             latest_pos = pos;
         }
 
-        template <typename U>
-        void read(U& data)
+        void read(T& data)
         {
-            U tmp = data;
+            T tmp = data;
             int count = 0;
             int offset = 0;
-            while (count < 64)
+            while (count < MAX_RETRIES)
             {   
-                Slot<T> buf = data_[latest_pos - offset];
+                Slot<T> buf = data_[(latest_pos - offset) & BUFFER_MASK];
                 if (!buf.is_writing)
                 {
                     read(data);   
-                    if (buf.seq_e == buf.seq_s) break;
+                    if (buf.seq_s == buf.seq_e) break;
                     ++offset;
                 }
                 count++;
-            }
-            
+            } 
+            data = tmp; 
         }
+
+        
     };
     
     
