@@ -1,5 +1,5 @@
-#ifndef _PS_DATABUFFER_HPP
-#define _PS_DATABUFFER_HPP
+#ifndef PS_DATABUFFER_HPP
+#define PS_DATABUFFER_HPP
 
 #include <iostream>
 #include <cstring>
@@ -17,12 +17,11 @@ namespace ps
         using D = std::remove_cv_t<std::remove_reference_t<T>>;
         // using DataType = std::conditional_t<std::is_array_v<D>, 
         //                             std::remove_extent_t<D>[std::extent_v<D>], D>;
-        
         static_assert(std::is_trivially_copyable_v<D>,"Slot requires trivially copyable type");
 
-        std::atomic<bool> is_writing{};
-        std::atomic<uint64_t> seq_s{};
-        std::atomic<uint64_t> seq_e{};
+        alignas(64) std::atomic<bool> is_writing{};
+        alignas(64) std::atomic<uint64_t> seq_s{};
+        alignas(64) std::atomic<uint64_t> seq_e{};
         unsigned int s = std::extent_v<D>;
         alignas(64) D data;
 
@@ -46,20 +45,20 @@ namespace ps
             memcpy(&out , data+offset, sizeof(U));
         }
 
-        template<typename U>
-        void write(const U& in, int offset)
-        {
-            if (offset >= s) return;
-            memcpy(data+offset, &in, sizeof(U));
-        }
+        // template<typename U>
+        // void write(const U& in, int offset)
+        // {
+        //     if (offset >= s) return;
+        //     memcpy(data+offset, &in, sizeof(U));
+        // }
 
-        template<typename U>
-        void write(const U& in, int offset, int size)
-        {
-            if (offset >= s) return;
-            if (size > N - offset) return;
-            memcpy(data+offset, U& in , size * sizeof(U));
-        }
+        // template<typename U>
+        // void write(const U& in, int offset, int size)
+        // {
+        //     if (offset >= s) return;
+        //     if (size > s - offset) return;
+        //     memcpy(data+offset, U& in , size * sizeof(U));
+        // }
 
     };
 
@@ -68,12 +67,14 @@ namespace ps
     class SpmcBuffer
     {
     private:
+        static_assert(BUFFER_SIZE >= 2, "BUFFER_SIZE must be >= 2");
+        static_assert((BUFFER_SIZE & (BUFFER_SIZE - 1)) == 0, "BUFFER_SIZE must be a power of 2");
         constexpr static unsigned int BUFFER_MASK = BUFFER_SIZE - 1;
         constexpr static unsigned int N = NUM_ELEMENTS;
         unsigned int MAX_RETRIES = 1024;
-        std::atomic<unsigned int> latest_pos{};
-        std::atomic<unsigned int> pos{};
-        Slot<T> data_[BUFFER_SIZE];
+        alignas(64) std::atomic<unsigned int> latest_pos{};
+        alignas(64) std::atomic<unsigned int> pos{};
+        alignas(64) Slot<T> data_[BUFFER_SIZE];
     protected:
         
     public:
@@ -84,32 +85,38 @@ namespace ps
 
         void write(const T& data)
         {
-            ++pos;
-            Slot<T> buf = data_[pos & BUFFER_MASK];
-            buf.is_writing = true;
-            ++buf.seq_s;
+            unsigned int p = pos.fetch_add(1,std::memory_order_relaxed) + 1;
+            Slot<T>& buf = data_[p & BUFFER_MASK];
+            buf.is_writing.store(true, std::memory_order_release);
+            buf.seq_s.fetch_add(1, std::memory_order_release);
             buf.write(data);
-            ++buf.seq_e;
-            latest_pos = pos;
+            buf.seq_e.fetch_add(1, std::memory_order_release);
+            buf.is_writing.store(false, std::memory_order_release);
+            latest_pos.store(p, std::memory_order_release);
         }
 
         void read(T& data)
         {
             T tmp = data;
             int count = 0;
-            int offset = 0;
+            // unsigned int offset = 0;
             while (count < MAX_RETRIES)
             {   
-                Slot<T> buf = data_[(latest_pos - offset) & BUFFER_MASK];
-                if (!buf.is_writing)
+                unsigned int lp = latest_pos.load(std::memory_order_acquire);
+                // if (offset > static_cast<int>(lp)) break;
+                Slot<T>& buf = data_[lp & BUFFER_MASK];
+                if (!buf.is_writing.load(std::memory_order_acquire))
                 {
-                    read(data);   
-                    if (buf.seq_s == buf.seq_e) break;
-                    ++offset;
+                    uint64_t s1 = buf.seq_s.load(std::memory_order_acquire);
+                    buf.read(data);  
+                    uint64_t s2 = buf.seq_e.load(std::memory_order_acquire); 
+                    if (s1 == s2) return;
+                    // ++offset;
                 }
                 count++;
             } 
-            data = tmp; 
+            if (count >= MAX_RETRIES)
+                data = tmp; 
         }
 
         
@@ -120,4 +127,4 @@ namespace ps
 
 
 
-#endif // _PS_DATABUFFER_HPP
+#endif // PS_DATABUFFER_HPP
