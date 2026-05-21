@@ -104,10 +104,12 @@ namespace ps
             {   
                 unsigned int lp = latest_pos.load(std::memory_order_acquire);
                 // if (offset > static_cast<int>(lp)) break;
+                // unsigned int lp = pos.load(std::memory_order_acquire);
                 Slot<T>& buf = data_[lp & BUFFER_MASK];
-                if (!buf.is_writing.load(std::memory_order_acquire))
+                uint64_t s1 = buf.seq_s.load(std::memory_order_acquire);
+                if (!(buf.is_writing.load(std::memory_order_acquire)))
                 {
-                    uint64_t s1 = buf.seq_s.load(std::memory_order_acquire);
+                    // uint64_t s1 = buf.seq_s.load(std::memory_order_acquire);
                     buf.read(data);  
                     uint64_t s2 = buf.seq_e.load(std::memory_order_acquire); 
                     if (s1 == s2) return;
@@ -115,8 +117,7 @@ namespace ps
                 }
                 count++;
             } 
-            if (count >= MAX_RETRIES)
-                data = tmp; 
+            data = tmp; 
         }
 
         
