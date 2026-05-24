@@ -10,7 +10,7 @@ int main(int argc, char const *argv[])
     a[0] = 10;
     s.write(a);
     ps::ParameterTable ptable;
-    int ret = ptable.addTableEntry("1",&a);
+    int ret = ptable.addTableEntry("1",a,1);
 
 
     // std::cout << "ind: " << ret << std::endl;
