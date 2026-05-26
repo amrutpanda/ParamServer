@@ -26,6 +26,7 @@ namespace ps
     struct TableEntryBase
     {
         public:
+            std::type_index dtype;
             unsigned int index;
             unsigned int data_type;
             unsigned int nele;
@@ -36,6 +37,8 @@ namespace ps
             unsigned int registered_writers{};
             TableEntryBase() = default;
             virtual ~TableEntryBase() = default;
+
+            TableEntryBase(const std::type_info& t): dtype(t) {}; 
     };
     
 
@@ -45,6 +48,8 @@ namespace ps
         public:
             T* data_pointer;
             ps::SpmcBuffer<T,NUM_ELEMENTS,BUFFER_SIZE> data_buffer; 
+
+            TableEntry() : TableEntryBase(typeid(T)) {};
 
             /**
              * @brief : is_linked parameter 
@@ -87,7 +92,13 @@ namespace ps
                 n = key_table_index_map.at(key);
                 auto& te = _table[n];
                 
-                // if (mode == 1 )
+                // check whether the types are matching.
+                if (te->dtype != typeid(T)) throw std::runtime_error("type mismatch");
+                if(mode == 1)
+                {
+                    if (te->registered_writers > 0) 
+                        throw std::runtime_error("cannot have two writers to a parameter");
+                }
             }
             else
             {
