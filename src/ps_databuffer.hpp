@@ -17,6 +17,7 @@ namespace ps
     struct Slot
     {
         using D = std::remove_cv_t<std::remove_reference_t<T>>;
+        // using D = std::remove_cv_t<std::remove_reference_t<std::remove_pointer_t<std::decay_t<T>>>>;
         // using DataType = std::conditional_t<std::is_array_v<D>, 
         //                             std::remove_extent_t<D>[std::extent_v<D>], D>;
         static_assert(std::is_trivially_copyable_v<D>,"Slot requires trivially copyable type");
@@ -26,6 +27,7 @@ namespace ps
         alignas(64) std::atomic<uint64_t> seq_s{};
         alignas(64) std::atomic<uint64_t> seq_e{};
         static constexpr unsigned int s = std::is_array_v<D> ? std::extent_v<D> : 1;
+        unsigned int size_ = 1;
         alignas(64) D data{};
 
         constexpr unsigned int getElemSize() const {return s;};
@@ -140,6 +142,20 @@ namespace ps
             latest_pos.store(p, std::memory_order_release);
         }
 
+        void write(const void* data, unsigned int& offset)
+        {
+            if constexpr(std::is_array_v<T>)
+                throw std::runtime_error("While writing spmc buffer, offset is only valid for array types.");
+            unsigned int p = pos.fetch_add(1,std::memory_order_relaxed) + 1;
+            Slot<T>& buf = data_[p & BUFFER_MASK];
+            buf.is_writing.store(true, std::memory_order_release);
+            buf.seq_s.fetch_add(1, std::memory_order_release);
+            buf.write(data, offset);
+            buf.seq_e.fetch_add(1, std::memory_order_release);
+            buf.is_writing.store(false, std::memory_order_release);
+            latest_pos.store(p, std::memory_order_release);
+        }
+
         void read(T& data)
         {
             T tmp = data;
@@ -168,7 +184,7 @@ namespace ps
         void read(void* data)
         {
             T tmp;
-            memcpy(tmp,data,sizeof(T));
+            memcpy(&tmp,data,sizeof(T));
             int count = 0;
             // unsigned int offset = 0;
             while (count < MAX_RETRIES)
@@ -188,10 +204,38 @@ namespace ps
                 }
                 count++;
             } 
-            data = tmp; 
+            // data = tmp; 
+            memcpy(data,&tmp, sizeof(T));
         }
 
-        
+        void read(void* data, unsigned int offset)
+        {
+            if constexpr(std::is_array_v<T>)
+                throw std::runtime_error("While reading spmc buffer, offset is only valid for array types.");
+            T tmp;
+            memcpy(&tmp,data+offset,sizeof(T));
+            int count = 0;
+            // unsigned int offset = 0;
+            while (count < MAX_RETRIES)
+            {   
+                unsigned int lp = latest_pos.load(std::memory_order_acquire);
+                // if (offset > static_cast<int>(lp)) break;
+                // unsigned int lp = pos.load(std::memory_order_acquire);
+                Slot<T>& buf = data_[lp & BUFFER_MASK];
+                uint64_t s1 = buf.seq_s.load(std::memory_order_acquire);
+                if (!(buf.is_writing.load(std::memory_order_acquire)))
+                {
+                    // uint64_t s1 = buf.seq_s.load(std::memory_order_acquire);
+                    buf.read(data,offset);  
+                    uint64_t s2 = buf.seq_e.load(std::memory_order_acquire); 
+                    if (s1 == s2) return;
+                    // ++offset;
+                }
+                count++;
+            } 
+            data = tmp; 
+            memcpy(data,&tmp+offset,sizeof(T));
+        }        
     };
     
     
