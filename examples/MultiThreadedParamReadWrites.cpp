@@ -20,8 +20,8 @@ int main(int argc, char const *argv[])
     pTable.addTableEntry("key2", v5);
 
     pTable.addTableEntry("key3", a);
-    pTable.addTableEntry("key4",v6.data(),1);
-    pTable.addTableEntry("key4",v3.data(),0);
+    pTable.addTableEntry<double,3>("key4",v6.data(),1);
+    pTable.addTableEntry<double,3>("key4",v3.data(),0);
 
     auto keymap = pTable.getKeyIndexMap();
 

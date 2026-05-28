@@ -4,15 +4,20 @@
 #include <iostream>
 #include <cstring>
 #include <cassert>
-#include "ps_databuffer.hpp"
-#include <ps_group.hpp>
+#include <cstddef>
 #include <memory>
 #include <unordered_map>
 #include <typeindex>
 #include <typeinfo>
+#include <type_traits>
+#include <array>
+#include <tuple>
+
 #include <Eigen/Dense>
 #include <Eigen/Core>
-#include <cstddef>
+
+#include <ps_databuffer.hpp>
+#include <ps_group.hpp>
 
 template <typename T>
 struct TypeInfo
@@ -101,6 +106,7 @@ namespace ps
     {
     private:
         unsigned int tbsize;
+    protected:
         std::vector<std::unique_ptr<TableEntryBase>> _table;
         std::vector<Group> group_list; 
         std::unordered_map<std::string, unsigned int> key_table_index_map;
@@ -112,7 +118,20 @@ namespace ps
             _table.reserve(tbsize);
             user_buffer.reserve(user_buffer_size);
         };
-        ~ParameterTable() {};
+        virtual ~ParameterTable() {};
+
+        unsigned int createGroup(const std::string& name);
+        void readByIndex(const unsigned int& idx, void* data);
+        void readFromKey(const std::string& key, void* data);
+        void writeByIndex(const unsigned int& idx, const void* data);
+        void writeToKey(const std::string& key, const void* data);
+        void GroupReads(const unsigned int& group_idx);
+        void GroupWrites(const unsigned int& group_idx);
+        unsigned int getParamBufferSize(const unsigned int& idx);
+        unsigned int getParamDataTyep(const unsigned int& idx);
+        std::vector<std::byte>& UserRead(const unsigned int& idx);
+        void UserWrite(const unsigned int& idx, std::vector<std::byte>& buf);
+        std::unordered_map<std::string,unsigned int>& getKeyIndexMap();
 
         template <typename T, unsigned int N = 1>
         unsigned int addTableEntry(const std::string& key, T& value, const unsigned int& mode = 0)
@@ -145,7 +164,7 @@ namespace ps
                 // create a unique pointer for a new table row.
                 std::unique_ptr<TableEntry<T,N>> te = std::make_unique<TableEntry<T,N>>();
                 te->data_buffer.write(value);
-                te->nele = std::is_array_v<T> ? std::extent_v<T> : 1 ;
+                te->nele = N;
                 std::cout << "key: " << key << " NumElements: " << te->nele << std::endl; 
                 te->index = n;
                 // determine whether it read or write.
@@ -189,7 +208,7 @@ namespace ps
                 std::unique_ptr<TableEntry<T,N>> te = std::make_unique<TableEntry<T,N>>();
                 te->data_buffer.write(*value);
 
-                te->nele = std::is_array_v<T> ? std::extent_v<T> : 1 ;
+                te->nele = N;
                 std::cout << "key: P " << key << " NumElements: " << te->nele << std::endl; 
 
                 te->index = n;
@@ -271,103 +290,20 @@ namespace ps
             
             return n;
         }
-
-        unsigned int createGroup(const std::string& name)
-        {
-            // get the group vector size.
-            int n = group_list.size();
-            Group group(name,n);
-            group_list.push_back(group);
-            return n;
-        }
-
-        void readByIndex(const unsigned int& idx, void* data)
-        {
-            assert(( "readByIndex::invalid index",idx < _table.size()));
-            _table[idx]->read_from_param_table(data);
-        }
-
-
-
-        void readFromKey(const std::string& key, void* data)
-        {
-            if (key_table_index_map.contains(key))
-            {
-                int idx = key_table_index_map.at(key);
-                _table[idx]->read_from_param_table(data);
-            }
-        }
-        
-        void writeByIndex(const unsigned int& idx, const void* data)
-        {
-            assert(( "writeByIndex::invalid index",idx < _table.size()));
-            _table[idx]->write_to_param_table(data);
-        }
-
-        void writeToKey(const std::string& key, const void* data)
-        {
-            if (key_table_index_map.contains(key))
-            {
-                int idx = key_table_index_map.at(key);
-                _table[idx]->write_to_param_table(data);
-            }
-        }
-
-        void GroupReads(const unsigned int& group_idx)
-        {
-            assert(( "groupRead::invalid index",group_idx < group_list.size()));
-            auto& cGroup = group_list[group_idx];
-            for (size_t i = 0; i < cGroup.read_indices.size(); i++)
-            {
-                unsigned int idx = cGroup.read_indices[i];
-                void* ptr = cGroup.read_data_ptrs[i];
-                readByIndex(idx, ptr);
-            }
-        }
-
-        void GroupWrites(const unsigned int& group_idx)
-        {
-            assert(( "GroupWrite::invalid index",group_idx < group_list.size()));
-            auto& cGroup = group_list[group_idx];
-            for (size_t i = 0; i < cGroup.write_indices.size(); i++)
-            {
-                unsigned int idx = cGroup.write_indices[i];
-                void* ptr = cGroup.write_data_ptrs[i];
-                writeByIndex(idx, ptr);
-            }
-        }
-
-        unsigned int getParamBufferSize(const unsigned int& idx)
-        {
-            assert(( "getParamBufferSize::invalid index",idx < _table.size()));
-            _table[idx]->nele;   
-        }
-
-        unsigned int getParamDataTyep(const unsigned int& idx)
-        {
-            assert(( "getParamDataType::invalid index",idx < _table.size()));
-            auto& te = _table[idx];
-            return 1;
-        }
-
-        std::vector<std::byte>& UserRead(const unsigned int& idx)
-        {
-            assert(( "UserRead::invalid index",idx < _table.size()));
-            if (_table[idx]->user_permission == 0)
-                _table[idx]->read_from_param_table(user_buffer.data());
-        }
-
-        void UserWrite(const unsigned int& idx, std::vector<std::byte>& buf)
-        {
-            assert(( "UserWrite::invalid index",idx < _table.size()));
-            if (_table[idx]->user_permission == 0)
-                _table[idx]->write_to_param_table(buf.data());
-        }
-
-        std::unordered_map<std::string,unsigned int>& getKeyIndexMap()
-        {
-            return key_table_index_map;
-        }
+    // template <typename T>
+    // unsigned int AddParameter(const std::string& key, T& variable, const unsigned int& mode = 0,
+    //                            const int& group_id = -1, const unsigned int& user_perm = 0);
+    
+    
+    /* *
+     * This function add parameter to 
+     * */                         
+    // template<typename T>
+    // requires std::derived_from<T, Eigen::EigenBase<T>> || 
+    //          std::is_same_v<T, std::array<typename T::value_type,std::tuple_size_v<T>>>
+    // unsigned int AddParameterVec(const std::string& key, T& variable, const unsigned int& mode = 0,
+    //                              const unsigned int& numElements = 1, const int& group_id = -1, 
+    //                              const unsigned int& user_perm = 0);
 
     };
        

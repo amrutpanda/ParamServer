@@ -5,7 +5,7 @@ int main(int argc, char const *argv[])
 {
     int a[2], b[2];
     ps::SpmcBuffer<int> spmc;
-    ps::Slot<int[2]> s;
+    ps::Slot<int,2> s;
     spmc.write(1);
     a[0] = 10;
     s.write(a);

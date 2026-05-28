@@ -13,22 +13,21 @@
 
 namespace ps
 {   
-    template <typename T>
+    template <typename T, unsigned int NUM_ELEMENTS = 1>
     struct Slot
     {
-        using D = std::remove_cv_t<std::remove_reference_t<T>>;
-        // using D = std::remove_cv_t<std::remove_reference_t<std::remove_pointer_t<std::decay_t<T>>>>;
-        // using DataType = std::conditional_t<std::is_array_v<D>, 
-        //                             std::remove_extent_t<D>[std::extent_v<D>], D>;
+        // using D = std::remove_cv_t<std::remove_reference_t<T>>;
+        using D = std::remove_cv_t<std::remove_reference_t<std::remove_pointer_t<std::decay_t<T>>>>;
         static_assert(std::is_trivially_copyable_v<D>,"Slot requires trivially copyable type");
+        static_assert(!std::is_pointer_v<D>, "Double pointers not allowed");
 
         std::type_index BaseType;
         alignas(64) std::atomic<bool> is_writing{};
         alignas(64) std::atomic<uint64_t> seq_s{};
         alignas(64) std::atomic<uint64_t> seq_e{};
         static constexpr unsigned int s = std::is_array_v<D> ? std::extent_v<D> : 1;
-        unsigned int size_ = 1;
-        alignas(64) D data{};
+        static constexpr unsigned int N = NUM_ELEMENTS;
+        alignas(64) D data[N]{};
 
         constexpr unsigned int getElemSize() const {return s;};
         constexpr unsigned int getSize() const {return sizeof(data);};
@@ -37,47 +36,44 @@ namespace ps
     
         void read(D& out) noexcept
         {
-            memcpy( &out, &data, sizeof(D));
+            memcpy( &out, &data, N*sizeof(D));
         };
 
         void read(D* out) noexcept
         {
-            memcpy( out, &data, sizeof(D));
+            memcpy( out, &data, N*sizeof(D));
         };
 
         void read(void* out_buffer) noexcept
         {
-            memcpy(out_buffer, &data ,sizeof(D));
+            memcpy(out_buffer, &data ,N*sizeof(D));
         };
 
         void write(const D& in) noexcept
         {
-            memcpy(&data, &in ,sizeof(D));
+            memcpy(&data, &in ,N*sizeof(D));
         };
 
         void write(const D* in) noexcept
         {
-            memcpy(&data, in, sizeof(D));
+            memcpy(&data, in, N*sizeof(D));
         };
 
         void write(const void* in_buffer) noexcept
         {
-            memcpy(&data, in_buffer, sizeof(D) );
+            memcpy(&data, in_buffer, N*sizeof(D) );
         };
 
-        template <typename U>
-        void read(U& out, int offset)
+        void read(D& out, int offset)
         {
-            if constexpr (!std::is_array_v<D>) return;
-            if (offset >= s) return;
-            memcpy(&out , data+offset, sizeof(U));
+            if (offset >= N) return;
+            memcpy(&out , &data+offset, sizeof(D));
         };
 
         void read(void* out, int offset)
         {
-            if constexpr (!std::is_array_v<D>) return;
-            if (offset >= s) return;
-            memcpy(out, data+offset, sizeof(std::remove_extent_t<D>));
+            if (offset >= N) return;
+            memcpy(out, &data+offset, sizeof(D));
         }
 
         // template<typename U>
@@ -109,7 +105,7 @@ namespace ps
         unsigned int MAX_RETRIES = 1024;
         alignas(64) std::atomic<unsigned int> latest_pos{};
         alignas(64) std::atomic<unsigned int> pos{};
-        alignas(64) Slot<T> data_[BUFFER_SIZE];
+        alignas(64) Slot<T,N> data_[BUFFER_SIZE];
     protected:
         
     public:
@@ -121,7 +117,7 @@ namespace ps
         void write(const T& data)
         {
             unsigned int p = pos.fetch_add(1,std::memory_order_relaxed) + 1;
-            Slot<T>& buf = data_[p & BUFFER_MASK];
+            Slot<T,N>& buf = data_[p & BUFFER_MASK];
             buf.is_writing.store(true, std::memory_order_release);
             buf.seq_s.fetch_add(1, std::memory_order_release);
             buf.write(data);
@@ -133,7 +129,7 @@ namespace ps
         void write(const void* data)
         {
             unsigned int p = pos.fetch_add(1,std::memory_order_relaxed) + 1;
-            Slot<T>& buf = data_[p & BUFFER_MASK];
+            Slot<T,N>& buf = data_[p & BUFFER_MASK];
             buf.is_writing.store(true, std::memory_order_release);
             buf.seq_s.fetch_add(1, std::memory_order_release);
             buf.write(data);
@@ -147,7 +143,7 @@ namespace ps
             if constexpr(std::is_array_v<T>)
                 throw std::runtime_error("While writing spmc buffer, offset is only valid for array types.");
             unsigned int p = pos.fetch_add(1,std::memory_order_relaxed) + 1;
-            Slot<T>& buf = data_[p & BUFFER_MASK];
+            Slot<T,N>& buf = data_[p & BUFFER_MASK];
             buf.is_writing.store(true, std::memory_order_release);
             buf.seq_s.fetch_add(1, std::memory_order_release);
             buf.write(data, offset);
@@ -166,7 +162,7 @@ namespace ps
                 unsigned int lp = latest_pos.load(std::memory_order_acquire);
                 // if (offset > static_cast<int>(lp)) break;
                 // unsigned int lp = pos.load(std::memory_order_acquire);
-                Slot<T>& buf = data_[lp & BUFFER_MASK];
+                Slot<T,N>& buf = data_[lp & BUFFER_MASK];
                 uint64_t s1 = buf.seq_s.load(std::memory_order_acquire);
                 if (!(buf.is_writing.load(std::memory_order_acquire)))
                 {
@@ -192,7 +188,7 @@ namespace ps
                 unsigned int lp = latest_pos.load(std::memory_order_acquire);
                 // if (offset > static_cast<int>(lp)) break;
                 // unsigned int lp = pos.load(std::memory_order_acquire);
-                Slot<T>& buf = data_[lp & BUFFER_MASK];
+                Slot<T,N>& buf = data_[lp & BUFFER_MASK];
                 uint64_t s1 = buf.seq_s.load(std::memory_order_acquire);
                 if (!(buf.is_writing.load(std::memory_order_acquire)))
                 {
