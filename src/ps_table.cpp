@@ -69,10 +69,11 @@ namespace ps
         unsigned int ParameterTable::getParamBufferSize(const unsigned int& idx)
         {
             assert(( "getParamBufferSize::invalid index",idx < _table.size()));
-            _table[idx]->nele;   
+            return _table[idx]->nele;   
+        
         }
 
-        unsigned int ParameterTable::getParamDataTyep(const unsigned int& idx)
+        unsigned int ParameterTable::getParamDataType(const unsigned int& idx)
         {
             assert(( "getParamDataType::invalid index",idx < _table.size()));
             auto& te = _table[idx];
@@ -84,6 +85,7 @@ namespace ps
             assert(( "UserRead::invalid index",idx < _table.size()));
             if (_table[idx]->user_permission == 0)
                 _table[idx]->read_from_param_table(user_buffer.data());
+            return user_buffer;
         }
 
         void ParameterTable::UserWrite(const unsigned int& idx, std::vector<std::byte>& buf)
@@ -97,5 +99,13 @@ namespace ps
         {
             return key_table_index_map;
         }
-        
+
+        void ParameterTable::destroy()
+        {
+            _table.clear();
+            group_list.clear();
+            key_table_index_map.clear();
+            
+        }
+
 } // namespace ps

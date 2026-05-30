@@ -5,6 +5,7 @@
 
 namespace ps
 {
+    
     class ParamServer final : public ParameterTable 
     {
     private:
@@ -15,9 +16,25 @@ namespace ps
                     ParameterTable(table_size,user_buffer_size) {};
         ~ParamServer();
 
+        void UpdateParameters(const unsigned int& group_id);
+        void FetchParameters(const unsigned int& group_id);
+
+        void ReadParameterByIndex(const unsigned int& idx);
+        void WriteParameterByIndex(const unsigned int& idx);
+
+        void ReadParameterFromKey(const std::string& idx);
+        void WriteParameterToKey(const std::string& idx);
+
+        void load(const std::string& filepath);
+        void save(const std::string& filepath);
+
+        void link(const std::string& filepath);
+
+        void destroy();
+
         template <typename T>
         unsigned int AddParameter(const std::string& key, T& variable, const unsigned int& mode = 0,
-                               const int& group_id = -1, const unsigned int& user_perm = 0);
+                               const unsigned int& param_type = 0, const int& group_id = -1);
 
         /* *
         * This function add basic data type parameters to parameter server.
@@ -26,18 +43,18 @@ namespace ps
         requires std::derived_from<T, Eigen::EigenBase<T>> || 
                 std::is_same_v<T, std::array<typename T::value_type,std::tuple_size_v<T>>>
         unsigned int AddParameterVec(const std::string& key, T& variable, const unsigned int& mode = 0,
-                                    const unsigned int& numElements = 1, const int& group_id = -1, 
-                                    const unsigned int& user_perm = 0);
+                                    const unsigned int& numElements = 1, const unsigned int& param_type = 0,
+                                    const int& group_id = -1);
  
     };
 
     template <typename T>
     unsigned int ParamServer::AddParameter(const std::string& key, T& variable, const unsigned int& mode,
-                               const int& group_id, const unsigned int& user_perm)
+                               const unsigned int& param_type, const int& group_id = -1)
     {
         using D = std::remove_cv_t<std::remove_reference_t<std::remove_pointer_t<std::decay_t<T>>>>;
         /// this is just for checking will implement with group id later.
-        auto ret = addTableEntry<D,1>(key,variable,mode);
+        auto ret = addTableEntry<D,1>(key,variable,mode,param_type,group_id);
         return ret;
     }
 
@@ -45,12 +62,15 @@ namespace ps
     requires std::derived_from<T, Eigen::EigenBase<T>> || 
                 std::is_same_v<T, std::array<typename T::value_type,std::tuple_size_v<T>>>
     unsigned int ParamServer::AddParameterVec(const std::string& key, T& variable, const unsigned int& mode,
-                                 const unsigned int& numElements, const int& group_id, 
-                                 const unsigned int& user_perm)
+                                 const unsigned int& numElements, const unsigned int& param_type,
+                                 const int& group_id)
     {
         using D = std::remove_cv_t<std::remove_reference_t<std::remove_pointer_t<std::decay_t<T>>>>;
         unsigned int N = numElements;
-        auto ret = addTableEntry<D,N>(key,variable,mode);
+        // check for size
+        if (variable.size() == 0 && N == 1) // for eigen dynamic vector or matrix.
+            throw std::runtime_error("Looks like Eigen matrix or vector has not been resized");
+        auto ret = addTableEntry<D,N>(key,variable.data(),mode,param_type,group_id);
         return ret;
     }
     
