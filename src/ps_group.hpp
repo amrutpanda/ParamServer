@@ -21,6 +21,12 @@ namespace ps
             id = _id;
         }
 
+        bool IfNameMatches(const std::string& group_name)
+        {
+            if (name == group_name) return true;
+            return false;
+        }
+
         void insert_for_read(const unsigned int& idx, void* ptr)
         {
             read_indices.push_back(idx);

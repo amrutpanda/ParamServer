@@ -2,6 +2,7 @@
 #define PS_PARAM_SERVER_HPP
 
 #include <ps_table.hpp>
+#include <pugixml.hpp>
 
 namespace ps
 {
@@ -9,28 +10,28 @@ namespace ps
     class ParamServer final : public ParameterTable 
     {
     private:
-        /* data */
+        std::vector<std::byte> general_msg_queue;
+        std::vector<std::byte> emergency_msg_queue;
+        std::vector<std::byte> log_msg_queue;
     public:
         ParamServer(const unsigned int& table_size = 1000, 
                     const unsigned int& user_buffer_size = 100): 
                     ParameterTable(table_size,user_buffer_size) {};
-        ~ParamServer();
+        ~ParamServer() {};
 
         void UpdateParameters(const unsigned int& group_id);
         void FetchParameters(const unsigned int& group_id);
 
-        void ReadParameterByIndex(const unsigned int& idx);
-        void WriteParameterByIndex(const unsigned int& idx);
+        void ReadParameterByIndex(const unsigned int& idx, void* data);
+        void WriteParameterByIndex(const unsigned int& idx, const void* data);
 
-        void ReadParameterFromKey(const std::string& idx);
-        void WriteParameterToKey(const std::string& idx);
+        void ReadParameterFromKey(const std::string& idx, void* data);
+        void WriteParameterToKey(const std::string& idx, const void* data);
 
-        void load(const std::string& filepath);
-        void save(const std::string& filepath);
+        bool load(const std::string& filepath);
+        bool save(const std::string& filepath);
 
-        void link(const std::string& filepath);
-
-        void destroy();
+        void link(const std::string& filepath) {};
 
         template <typename T>
         unsigned int AddParameter(const std::string& key, T& variable, const unsigned int& mode = 0,
@@ -50,11 +51,29 @@ namespace ps
 
     template <typename T>
     unsigned int ParamServer::AddParameter(const std::string& key, T& variable, const unsigned int& mode,
-                               const unsigned int& param_type, const int& group_id = -1)
+                               const unsigned int& param_type, const int& group_id)
     {
         using D = std::remove_cv_t<std::remove_reference_t<std::remove_pointer_t<std::decay_t<T>>>>;
         /// this is just for checking will implement with group id later.
-        auto ret = addTableEntry<D,1>(key,variable,mode,param_type,group_id);
+        // get group name from ID.
+        std::string group_name, modified_key;
+        unsigned int ret;
+        if (group_id != -1)
+        {
+            group_name = getGroupNameFromID(group_id);
+            modified_key = group_name + "/"+ key;
+            // register key and variable to the parameter table. 
+            ret = addTableEntry<D,1>(modified_key,variable,mode,param_type,group_id);
+        }
+        else
+        {
+            group_name = "/origin";
+            modified_key = group_name + "/" + key;
+            // register key and variable to the parameter table. 
+            ret = addTableEntry<D,1>(modified_key,variable,mode);
+        }      
+       // register key and variable to the parameter table. 
+        // auto ret = addTableEntry<D,1>(modified_key,variable,mode,param_type,group_id);
         return ret;
     }
 
@@ -65,12 +84,36 @@ namespace ps
                                  const unsigned int& numElements, const unsigned int& param_type,
                                  const int& group_id)
     {
+        // check whether the object has .size() and .data() method.
+        // if constexpr(!(requires{variable.size();}))
+        //     static_assert(false,"Type must provide size() method.");
+        // if constexpr(!(requires{variable.data();}))
+        //     static_assert(false,"Type must provide data() method.");
+
         using D = std::remove_cv_t<std::remove_reference_t<std::remove_pointer_t<std::decay_t<T>>>>;
         unsigned int N = numElements;
         // check for size
         if (variable.size() == 0 && N == 1) // for eigen dynamic vector or matrix.
             throw std::runtime_error("Looks like Eigen matrix or vector has not been resized");
-        auto ret = addTableEntry<D,N>(key,variable.data(),mode,param_type,group_id);
+        // get group name from ID.
+        std::string group_name, modified_key;
+        unsigned int ret;
+        if (group_id != -1)
+        {
+            group_name = getGroupNameFromID(group_id);
+            modified_key = group_name + "/"+ key;
+            // register key and variable to the parameter table. 
+            ret = addTableEntry<D,N>(modified_key,variable,mode,param_type,group_id);
+        }
+        else
+        {
+            group_name = "/origin";
+            modified_key = group_name + "/" + key;
+            // register key and variable to the parameter table. 
+            ret = addTableEntry<D,N>(modified_key,variable,mode,param_type);
+        } 
+       // register key and variable to the parameter table.
+        // auto ret = addTableEntry<D,N>(modified_key,variable.data(),mode,param_type,group_id);
         return ret;
     }
     

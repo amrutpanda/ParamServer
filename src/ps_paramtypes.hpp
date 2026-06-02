@@ -1,14 +1,24 @@
 #ifndef _PS_PARAMTYPES_HPP
 #define _PS_PARAMTYPES_HPP
 
-
-enum PARAM
+namespace ps
 {
-    READ_ONCE = 0,
-    READ_ONLY,
-    READ_WRITE,
-    CONSTANT,
-    WRITE_ONCE
-};
+    
+    enum class PARAM
+    {
+        INPUT = 0,
+        OUTPUT,
+        PARAMETER
+    };
+
+    enum class MODE
+    {
+        READ = 0,
+        WRITE
+    };
+} // namespace ps
+
+
+
 
 #endif // _PS_PARAMTYPES_HPP

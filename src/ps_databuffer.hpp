@@ -28,6 +28,7 @@ namespace ps
         static constexpr unsigned int s = std::is_array_v<D> ? std::extent_v<D> : 1;
         static constexpr unsigned int N = NUM_ELEMENTS;
         alignas(64) D data[N]{};
+        // alignas(64) std::array<D,N> data{};
 
         constexpr unsigned int getElemSize() const {return s;};
         constexpr unsigned int getSize() const {return sizeof(data);};
@@ -138,7 +139,7 @@ namespace ps
             latest_pos.store(p, std::memory_order_release);
         }
 
-        void write(const void* data, unsigned int& offset)
+        void write(const void* data_buf, unsigned int& offset)
         {
             if constexpr(std::is_array_v<T>)
                 throw std::runtime_error("While writing spmc buffer, offset is only valid for array types.");
@@ -146,15 +147,15 @@ namespace ps
             Slot<T,N>& buf = data_[p & BUFFER_MASK];
             buf.is_writing.store(true, std::memory_order_release);
             buf.seq_s.fetch_add(1, std::memory_order_release);
-            buf.write(data, offset);
+            buf.write(data_buf, offset);
             buf.seq_e.fetch_add(1, std::memory_order_release);
             buf.is_writing.store(false, std::memory_order_release);
             latest_pos.store(p, std::memory_order_release);
         }
 
-        void read(T& data)
+        void read(T& data_buf)
         {
-            T tmp = data;
+            T tmp = data_buf;
             int count = 0;
             // unsigned int offset = 0;
             while (count < MAX_RETRIES)
@@ -167,20 +168,20 @@ namespace ps
                 if (!(buf.is_writing.load(std::memory_order_acquire)))
                 {
                     // uint64_t s1 = buf.seq_s.load(std::memory_order_acquire);
-                    buf.read(data);  
+                    buf.read(data_buf);  
                     uint64_t s2 = buf.seq_e.load(std::memory_order_acquire); 
                     if (s1 == s2) return;
                     // ++offset;
                 }
                 count++;
             } 
-            data = tmp; 
+            data_buf = tmp; 
         }
 
-        void read(void* data)
+        void read(void* data_buf)
         {
             T tmp;
-            memcpy(&tmp,data,sizeof(T));
+            memcpy(&tmp,data_buf,sizeof(T));
             int count = 0;
             // unsigned int offset = 0;
             while (count < MAX_RETRIES)
@@ -193,7 +194,7 @@ namespace ps
                 if (!(buf.is_writing.load(std::memory_order_acquire)))
                 {
                     // uint64_t s1 = buf.seq_s.load(std::memory_order_acquire);
-                    buf.read(data);  
+                    buf.read(data_buf);  
                     uint64_t s2 = buf.seq_e.load(std::memory_order_acquire); 
                     if (s1 == s2) return;
                     // ++offset;
@@ -201,15 +202,15 @@ namespace ps
                 count++;
             } 
             // data = tmp; 
-            memcpy(data,&tmp, sizeof(T));
+            memcpy(data_buf,&tmp, sizeof(T));
         }
 
-        void read(void* data, unsigned int offset)
+        void read(void* data_buf, unsigned int offset)
         {
             if constexpr(std::is_array_v<T>)
                 throw std::runtime_error("While reading spmc buffer, offset is only valid for array types.");
             T tmp;
-            memcpy(&tmp,data+offset,sizeof(T));
+            memcpy(&tmp,data_buf+offset,sizeof(T));
             int count = 0;
             // unsigned int offset = 0;
             while (count < MAX_RETRIES)
@@ -222,18 +223,20 @@ namespace ps
                 if (!(buf.is_writing.load(std::memory_order_acquire)))
                 {
                     // uint64_t s1 = buf.seq_s.load(std::memory_order_acquire);
-                    buf.read(data,offset);  
+                    buf.read(data_buf,offset);  
                     uint64_t s2 = buf.seq_e.load(std::memory_order_acquire); 
                     if (s1 == s2) return;
                     // ++offset;
                 }
                 count++;
             } 
-            data = tmp; 
-            memcpy(data,&tmp+offset,sizeof(T));
+            data_buf = tmp; 
+            memcpy(data_buf,&tmp+offset,sizeof(T));
         }        
     };
     
+
+
     
 } // namespace paramserver
 

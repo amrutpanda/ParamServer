@@ -137,6 +137,7 @@ namespace ps
         };
         virtual ~ParameterTable() {};
 
+        std::string getGroupNameFromID(const unsigned int& id_);
         unsigned int createGroup(const std::string& name);
         void readByIndex(const unsigned int& idx, void* data);
         void readFromKey(const std::string& key, void* data);

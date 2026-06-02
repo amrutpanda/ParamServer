@@ -6,9 +6,25 @@ namespace ps
         {
             // get the group vector size.
             int n = group_list.size();
+            // check if the group name already exists.
+            for (auto& it : group_list)
+            {
+                if (it.IfNameMatches(name))
+                    throw std::runtime_error("Group name already exists! name: " + name + " id: " + std::to_string(it.id));
+            }
+            // if everything is alright create a new group and save it.
             Group group(name,n);
             group_list.push_back(group);
             return n;
+        }
+
+        std::string ParameterTable::getGroupNameFromID(const unsigned int& id_)
+        {
+            for (auto& _gr : group_list)
+            {
+                if (_gr.id == id_) return _gr.name;
+            }
+            throw std::runtime_error("Could not find any group name from given id: " + std::to_string(id_));
         }
 
         void ParameterTable::readByIndex(const unsigned int& idx, void* data)
