@@ -12,6 +12,7 @@
 #include <type_traits>
 #include <array>
 #include <tuple>
+#include <variant>
 
 #include <Eigen/Dense>
 #include <Eigen/Core>
@@ -30,25 +31,11 @@ const std::type_index TypeInfo<T>::id = typeid(T);
 
 namespace ps
 {
-
-    enum class Parameter
-    {
-        INPUT = 0,
-        OUTPUT,
-        PARAM,
-    };
-
-    enum class Mode
-    {
-        READ=0,
-        WRITE,
-        READONCE
-    };
-   
     struct TableEntryBase
     {
         public:
             std::type_index dtype;
+            std::type_index ftype;
             unsigned int index;
             unsigned int data_type;
             unsigned int nele;
@@ -62,7 +49,7 @@ namespace ps
             TableEntryBase() = default;
             virtual ~TableEntryBase() = default;
 
-            TableEntryBase(const std::type_info& t): dtype(t) {}; 
+            TableEntryBase(const std::type_info& t): dtype(t), ftype{t} {}; 
 
             void print_type() {std::cout << dtype.name() << std::endl;}
 
@@ -79,6 +66,19 @@ namespace ps
         public:
             T* data_pointer;
             ps::SpmcBuffer<T,NUM_ELEMENTS,BUFFER_SIZE> data_buffer; 
+
+            // const std::type_index normalized_type()
+            // {
+            //     using U = std::remove_cv_t<std::remove_reference_t<T>>;
+            //     if constexpr (std::is_integral_v<U>)
+            //         return typeid(int);
+            //     else if constexpr (std::is_same_v<U,float>)
+            //         return typeid(float);
+            //     else if constexpr(std::is_floating_point_v<U>)
+            //         return typeid(double);
+            //     else
+            //         return typeid(std::string);
+            // }
 
             TableEntry() : TableEntryBase(typeid(T)) {};
 
@@ -124,7 +124,8 @@ namespace ps
     private:
         unsigned int tbsize;
     protected:
-        std::vector<std::unique_ptr<TableEntryBase>> _table;
+        // std::vector<std::unique_ptr<TableEntryBase>> _table;
+        std::vector<TableEntryBase*> _table;
         std::vector<Group> group_list; 
         std::unordered_map<std::string, unsigned int> key_table_index_map;
         std::vector<std::byte> user_buffer;
@@ -138,7 +139,7 @@ namespace ps
         virtual ~ParameterTable() {};
 
         std::string getGroupNameFromID(const unsigned int& id_);
-        unsigned int createGroup(const std::string& name);
+        [[nodiscard]]unsigned int createGroup(const std::string& name);
         void readByIndex(const unsigned int& idx, void* data);
         void readFromKey(const std::string& key, void* data);
         void writeByIndex(const unsigned int& idx, const void* data);
@@ -167,6 +168,7 @@ namespace ps
                 std::cout << "key: " << key << " NumElements: " << te->nele << " index: " << n << std::endl; 
                 // check whether the types are matching.
                 if (te->dtype != typeid(T)) throw std::runtime_error("type mismatch: AddTableEntry(), key: " + key);
+                if (te->nele != N) throw std::runtime_error("size mismatch of key: " + key);
                 if(mode == 1)
                 {
                     if (te->registered_writers > 0) 
@@ -182,7 +184,8 @@ namespace ps
                 // get the current size of table.
                 n = _table.size();
                 // create a unique pointer for a new table row.
-                std::unique_ptr<TableEntry<T,N>> te = std::make_unique<TableEntry<T,N>>();
+                // std::unique_ptr<TableEntry<T,N>> te = std::make_unique<TableEntry<T,N>>();
+                TableEntry<T,N>* te = new TableEntry<T,N>();
                 te->data_buffer.write(value);
                 te->nele = N;
                 std::cout << "New key: " << key << " NumElements: " << te->nele << " index: " << n << std::endl; 
@@ -193,7 +196,8 @@ namespace ps
                 else if (mode == 0)
                     te->registered_readers++;
                 // push the unique pointer into table container.
-                _table.push_back(std::move(te));
+                // _table.push_back(std::move(te));
+                _table.push_back(te);
                 // add the key to unordered_map along with the index.
                 key_table_index_map[key] = n;
             }
@@ -218,6 +222,7 @@ namespace ps
 
                 // check whether the types are matching.
                 if (te->dtype != typeid(T)) throw std::runtime_error("type mismatch: AddTableEntry(), key: " + key);
+                if (te->nele != N) throw std::runtime_error("size mismatch of key: " + key);
                 if(mode == 1)
                 {
                     if (te->registered_writers > 0) 
@@ -229,12 +234,12 @@ namespace ps
                 // get the current size of table.
                 n = _table.size();
                 // create a unique pointer for a new table row.
-                std::unique_ptr<TableEntry<T,N>> te = std::make_unique<TableEntry<T,N>>();
+                // std::unique_ptr<TableEntry<T,N>> te = std::make_unique<TableEntry<T,N>>();
+                TableEntry<T,N>* te = new TableEntry<T,N>();
+                // write the current value to param server.
                 te->data_buffer.write(*value);
-
                 te->nele = N;
                 std::cout << "New key: P " << key << " NumElements: " << te->nele << " index: " << n << std::endl; 
-
                 te->index = n;
                 // determine whether it read or write.
                 if (mode == 1)
@@ -242,7 +247,8 @@ namespace ps
                 else if (mode == 0)
                     te->registered_readers++;
                 // push the unique pointer into table container.
-                _table.push_back(std::move(te));
+                // _table.push_back(std::move(te));
+                _table.push_back(te);
                 // add the key to unordered_map along with the index.
                 key_table_index_map[key] = n;
             }
@@ -264,6 +270,7 @@ namespace ps
                     throw std::runtime_error("No parameter with given key: " + key + " index: " + std::to_string(n));
                 // check whether the types are matching.
                 if (te->dtype != typeid(T)) throw std::runtime_error("type mismatch: AddTableEntry(), key: " + key);
+                if (te->nele != N) throw std::runtime_error("size mismatch of key: " + key);
                 if(mode == 1)
                 {
                     if (te->registered_writers > 0) 
@@ -274,11 +281,11 @@ namespace ps
                 if (group_id >= group_list.size()) throw std::runtime_error("group id out of range.");
                 if (mode == 1)
                 {
-                    group_list[group_id].insert_for_write(n,value);
+                    group_list[group_id].insert_for_write(n,static_cast<void*>(&value));
                 }
                 else if (mode == 0)
                 {
-                   group_list[group_id].insert_for_read(n,value);
+                   group_list[group_id].insert_for_read(n,static_cast<void*>(&value));
                 }
             } 
             else
@@ -286,7 +293,8 @@ namespace ps
                 // get the current size of table.
                 n = _table.size();
                 // create a unique pointer for a new table row.
-                std::unique_ptr<TableEntry<T,N>> te = std::make_unique<TableEntry<T,N>>();
+                // std::unique_ptr<TableEntry<T,N>> te = std::make_unique<TableEntry<T,N>>();
+                TableEntry<T,N>* te = new TableEntry<T,N>();
                 te->data_buffer.write(value);
                 te->nele = N;
                 te->param_type = param_type;
@@ -295,15 +303,16 @@ namespace ps
                 if (mode == 1)
                 {
                     te->registered_writers++;
-                    group_list[group_id].insert_for_write(n,value);
+                    group_list[group_id].insert_for_write(n,static_cast<void*>(&value));
                 }
                 else if(mode == 0)
                 {
-                   group_list[group_id].insert_for_read(n,value);
+                   group_list[group_id].insert_for_read(n,static_cast<void*>(&value));
                 }
                 
                 // push the unique pointer into table container.
-                _table.push_back(std::move(te));
+                // _table.push_back(std::move(te));
+                _table.push_back(te);
                 key_table_index_map[key] = n;
             }
             
@@ -323,6 +332,7 @@ namespace ps
                     throw std::runtime_error("No parameter with given key: " + key + " index: " + std::to_string(n));
                 // check whether the types are matching.
                 if (te->dtype != typeid(T)) throw std::runtime_error("type mismatch: AddTableEntry(), key: " + key);
+                if (te->nele != N) throw std::runtime_error("size mismatch of key: " + key);
                 if(mode == 1)
                 {
                     if (te->registered_writers > 0) 
@@ -333,11 +343,11 @@ namespace ps
                 if (group_id >= group_list.size()) throw std::runtime_error("group id out of range.");
                 if (mode == 1)
                 {
-                    group_list[group_id].insert_for_write(n,value);
+                    group_list[group_id].insert_for_write(n,static_cast<void*>(value));
                 }
                 else if (mode == 0)
                 {
-                   group_list[group_id].insert_for_read(n,value);
+                   group_list[group_id].insert_for_read(n,static_cast<void*>(value));
                 }
             } 
             else
@@ -345,7 +355,8 @@ namespace ps
                 // get the current size of table.
                 n = _table.size();
                 // create a unique pointer for a new table row.
-                std::unique_ptr<TableEntry<T,N>> te = std::make_unique<TableEntry<T,N>>();
+                // std::unique_ptr<TableEntry<T,N>> te = std::make_unique<TableEntry<T,N>>();
+                TableEntry<T,N>* te = new TableEntry<T,N>();
                 te->data_buffer.write(value);
                 te->nele = N;
                 te->param_type = param_type;
@@ -362,26 +373,13 @@ namespace ps
                 }
                 
                 // push the unique pointer into table container.
-                _table.push_back(std::move(te));
+                // _table.push_back(std::move(te));
+                _table.push_back(te);
                 key_table_index_map[key] = n;
             }
             
             return n;
         }
-    // template <typename T>
-    // unsigned int AddParameter(const std::string& key, T& variable, const unsigned int& mode = 0,
-    //                            const int& group_id = -1, const unsigned int& user_perm = 0);
-    
-    
-    /* *
-     * This function add parameter to 
-     * */                         
-    // template<typename T>
-    // requires std::derived_from<T, Eigen::EigenBase<T>> || 
-    //          std::is_same_v<T, std::array<typename T::value_type,std::tuple_size_v<T>>>
-    // unsigned int AddParameterVec(const std::string& key, T& variable, const unsigned int& mode = 0,
-    //                              const unsigned int& numElements = 1, const int& group_id = -1, 
-    //                              const unsigned int& user_perm = 0);
 
     };
        

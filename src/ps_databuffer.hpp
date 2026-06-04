@@ -28,53 +28,53 @@ namespace ps
         static constexpr unsigned int s = std::is_array_v<D> ? std::extent_v<D> : 1;
         static constexpr unsigned int N = NUM_ELEMENTS;
         alignas(64) D data[N]{};
-        // alignas(64) std::array<D,N> data{};
+        // std::vector<D> data_vec{N};
 
-        constexpr unsigned int getElemSize() const {return s;};
+        constexpr unsigned int getElemSize() const {return N;};
         constexpr unsigned int getSize() const {return sizeof(data);};
 
         Slot() : BaseType(typeid(std::remove_extent_t<D>)) {};
     
         void read(D& out) noexcept
         {
-            memcpy( &out, &data, N*sizeof(D));
+            memcpy( &out, data, N*sizeof(D));
         };
 
         void read(D* out) noexcept
         {
-            memcpy( out, &data, N*sizeof(D));
+            memcpy( out, data, N*sizeof(D));
         };
 
         void read(void* out_buffer) noexcept
         {
-            memcpy(out_buffer, &data ,N*sizeof(D));
+            memcpy(out_buffer, data ,N*sizeof(D));
         };
 
         void write(const D& in) noexcept
         {
-            memcpy(&data, &in ,N*sizeof(D));
+            memcpy(data, &in ,N*sizeof(D));
         };
 
         void write(const D* in) noexcept
         {
-            memcpy(&data, in, N*sizeof(D));
+            memcpy(data, in, N*sizeof(D));
         };
 
         void write(const void* in_buffer) noexcept
         {
-            memcpy(&data, in_buffer, N*sizeof(D) );
+            memcpy(data, in_buffer, N*sizeof(D) );
         };
 
         void read(D& out, int offset)
         {
             if (offset >= N) return;
-            memcpy(&out , &data+offset, sizeof(D));
+            memcpy(&out , data+offset, sizeof(D));
         };
 
         void read(void* out, int offset)
         {
             if (offset >= N) return;
-            memcpy(out, &data+offset, sizeof(D));
+            memcpy(out, data+offset, sizeof(D));
         }
 
         // template<typename U>

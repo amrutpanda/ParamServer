@@ -118,6 +118,12 @@ namespace ps
 
         void ParameterTable::destroy()
         {
+            // free all the pointers inside _table vector.
+            for (size_t i = 0; i < _table.size(); i++)
+            {
+                // delete _table[i];
+            }
+            // clear up all the data structures.
             _table.clear();
             group_list.clear();
             key_table_index_map.clear();
