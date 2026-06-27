@@ -1,6 +1,0 @@
-#ifndef _PS_CACHELINE_HPP
-#define _PS_CACHELINE_HPP
-
-#define CACHELINESIZE 64
-
-#endif // _PS_CACHELINE_HPP

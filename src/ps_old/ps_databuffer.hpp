@@ -13,7 +13,7 @@
 
 namespace ps
 {   
-    template <typename T, unsigned int NUM_ELEMENTS = 1>
+    template <typename T, int NUM_ELEMENTS = 1>
     struct Slot
     {
         // using D = std::remove_cv_t<std::remove_reference_t<T>>;
@@ -30,10 +30,25 @@ namespace ps
         alignas(64) D data[N]{};
         // std::vector<D> data_vec{N};
 
+        if constexpr (NUM_ELEMENTS == -1)
+        {
+            alignas(64) D data_[N] {};
+        }
+        else
+        {
+            D* data_;
+        }
+        
         constexpr unsigned int getElemSize() const {return N;};
         constexpr unsigned int getSize() const {return sizeof(data);};
 
         Slot() : BaseType(typeid(std::remove_extent_t<D>)) {};
+
+        void resize(unsigned int size)
+        {
+            if constexpr ( NUM_ELEMENTS == -1)
+                data_ = new D[size];
+        }
     
         void read(D& out) noexcept
         {
@@ -95,7 +110,7 @@ namespace ps
     };
 
 
-    template <typename T, unsigned int NUM_ELEMENTS = 1 ,unsigned int BUFFER_SIZE = 16>
+    template <typename T, int NUM_ELEMENTS = 1 ,unsigned int BUFFER_SIZE = 16>
     class SpmcBuffer
     {
     private:

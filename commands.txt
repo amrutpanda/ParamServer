@@ -3,3 +3,11 @@ cmake -G Ninja .. (instead of cmake ..)
 
 ### can use "ninja" instead of "make -j${nproc}" as ninja in multithreaded by design.
 ### Alternatively we can use "cmake -build .SSSS"
+
+In order to make the system realtime need set -1 to
+
+/proc/sys/kernel/sched_rt_runtime_us 
+
+with a boot script, otherwise linux kernel will force the rt task to give up cpu if 
+the combined rt task takes more than 950 milliseconds.
+

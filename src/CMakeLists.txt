@@ -6,14 +6,12 @@ file(GLOB HEADERS "*.hpp")
 find_package(nng REQUIRED)
 
 include_directories(${HEADERS} ${NNG_INCLUDE_DIRS})
-foreach(file ${SOURCES})
-    message(STATUS "found file: ${file}")
-endforeach()
 
-foreach(file ${HEADERS})
-    message(STATUS "found file: ${file}")
-endforeach()
+add_subdirectory(nanomsg)
+add_subdirectory(db)
 
-add_library(ps STATIC ${SOURCES})
-target_link_libraries(ps PUBLIC ${NNG_LIBRARY} pugixml)
-target_include_directories(ps PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+# BUILD THE PS LIBRARY.
+add_library(ps ${DB_SOURCES} ${NET_SOURCES})
+target_link_libraries(ps PUBLIC proto)
+target_include_directories(ps PUBLIC ${DB_HEADERS} ${NET_HEADERS})
