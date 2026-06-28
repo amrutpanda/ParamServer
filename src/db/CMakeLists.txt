@@ -17,6 +17,7 @@ endfunction()
 #     message(STATUS "found file inside db: ${file}")
 # endforeach()
 
+# include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 set(DB_SOURCES ${SOURCES} PARENT_SCOPE)
-set(DB_HEADERS ${CMAKE_CURRENT_SOURCE_DIR} PARENT_SCOPE)
+set(DB_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR} PARENT_SCOPE)

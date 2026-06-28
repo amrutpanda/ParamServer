@@ -25,7 +25,22 @@ namespace ps
     enum class DataContainerType
     {
         INPUT = 0,
-        OUTPUT
+        OUTPUT,
+        FIXED
+    };
+
+    enum class ActionType
+    {
+        NONE = -1,
+        START_PUBLISH = 0,
+        STOP_PUBLISH,
+        INPUT,
+        OUTPUT,
+        OVERWRITE_INPUT,
+        OVERWRITE_OUTPUT,
+        OVERWRITE_DEACTIVATE,
+        ACTIVATE_LINK,
+        DEACTIVATE_LINK
     };
 
 } // namespace db
